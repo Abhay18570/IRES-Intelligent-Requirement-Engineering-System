@@ -7,7 +7,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
-@Profile("dev")
+@Profile({"dev", "prod"})
 public class CorsConfig implements WebMvcConfigurer {
 
     private final String allowedOrigins;

@@ -1,4 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.ires.requirement.workflow.RequirementWorkflowServiceTest
--------------------------------------------------------------------------------
-Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 11.01 s -- in com.ires.requirement.workflow.RequirementWorkflowServiceTest

@@ -4,3 +4,9 @@ dist-ssr
 *.local
 .DS_Store
 .env
+# Maven build output
+backend/target/
+
+
+architecture map.txt
+context/

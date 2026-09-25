@@ -1,0 +1,10 @@
+sudo systemctl stop postgresql
+docker compose up -d --wait postgres
+docker compose up -d --build
+docker compose ps
+
+mvn -f backend/pom.xml spring-boot:run
+
+npm run dev
+
+http://localhost:5173/
