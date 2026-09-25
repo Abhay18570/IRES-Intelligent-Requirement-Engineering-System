@@ -49,10 +49,12 @@ class RequirementAIAnalysisServiceTest {
         Requirement requirement = requirement();
         when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
         when(analysisRepository.findByRequirementId(requirement.getId())).thenReturn(Optional.empty());
-        when(analysisRepository.save(any(RequirementAIAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(analysisRepository.save(any(RequirementAIAnalysis.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
         when(analysisProvider.analyze(requirement)).thenReturn(new AIAnalysisProvider.AIAnalysisResult(
                 "Summary", new BigDecimal("10"), new BigDecimal("90"), new BigDecimal("85"), "Suggestion"));
-
         var response = analysisService.analyze(requirement.getId(), principal);
 
         assertThat(response.analysisStatus()).isEqualTo(AnalysisStatus.COMPLETED);
@@ -65,7 +67,10 @@ class RequirementAIAnalysisServiceTest {
         Requirement requirement = requirement();
         when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
         when(analysisRepository.findByRequirementId(requirement.getId())).thenReturn(Optional.empty());
-        when(analysisRepository.save(any(RequirementAIAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(analysisRepository.save(any(RequirementAIAnalysis.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
         when(analysisProvider.analyze(requirement)).thenThrow(new IllegalStateException("provider unavailable"));
 
         var response = analysisService.analyze(requirement.getId(), principal);

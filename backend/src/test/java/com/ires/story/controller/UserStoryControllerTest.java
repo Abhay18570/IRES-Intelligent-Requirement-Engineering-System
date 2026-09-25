@@ -10,6 +10,7 @@ import com.ires.config.SecurityConfig;
 import com.ires.requirement.service.RequirementService;
 import com.ires.story.service.UserStoryService;
 import com.ires.user.service.UserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -58,6 +60,15 @@ class UserStoryControllerTest {
     @MockBean
     private AIAnalysisProvider analysisProvider;
 
+    @BeforeEach
+    void letRequestsPassThroughMockedJwtFilter() throws Exception {
+        doAnswer(invocation -> {
+            jakarta.servlet.FilterChain chain = invocation.getArgument(2);
+            chain.doFilter(invocation.getArgument(0), invocation.getArgument(1));
+            return null;
+        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+    }
+
     @Test
     void storyEndpointRequiresAuthentication() throws Exception {
         mockMvc.perform(get("/api/v1/requirements/" + UUID.randomUUID() + "/user-stories"))
@@ -70,7 +81,7 @@ class UserStoryControllerTest {
                 .thenThrow(new ServiceUnavailableException("The AI provider is currently unavailable."));
 
         mockMvc.perform(post("/api/v1/requirements/" + UUID.randomUUID() + "/user-stories/generate")
-                        .with(user("client@example.com").roles("CLIENT")))
+                        .with(user("client@example.com").roles("BUSINESS_ANALYST")))
                 .andExpect(status().isServiceUnavailable());
     }
 }

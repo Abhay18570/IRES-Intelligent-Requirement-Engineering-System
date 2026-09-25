@@ -21,3 +21,10 @@ app:
     max-file-size-bytes: ${MAX_FILE_SIZE_BYTES:10485760}
   ai:
     mock-enabled: ${AI_MOCK_ENABLED:true}
+    analysis:
+      provider: ${AI_ANALYSIS_PROVIDER:mock}
+      model: ${AI_ANALYSIS_MODEL:}
+      base-url: ${AI_ANALYSIS_BASE_URL:}
+      api-key: ${AI_ANALYSIS_API_KEY:}
+      timeout-ms: ${AI_ANALYSIS_TIMEOUT_MS:30000}
+

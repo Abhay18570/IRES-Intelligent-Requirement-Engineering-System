@@ -1,0 +1,15 @@
+spring:
+  profiles:
+    active: test
+app:
+  jwt:
+    secret: "test-secret-key-for-ires-tests-minimum-32-bytes"
+    expiration-ms: 900000
+
+  storage:
+    upload-dir: "./target/test-uploads"
+
+  attachments:
+    max-file-size-bytes: 10485760
+
+  
