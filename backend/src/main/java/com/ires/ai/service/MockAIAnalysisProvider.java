@@ -20,8 +20,11 @@ import com.ires.ai.dto.analysis.QualityAnalysisResponse;
 import com.ires.ai.dto.analysis.QualityDimension;
 import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.dto.analysis.RequirementCandidate;
+import com.ires.ai.dto.srs.SrsGenerationRequest;
+import com.ires.ai.dto.srs.SrsGenerationResponse;
 import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
+import com.ires.requirement.entity.RequirementType;
 import com.ires.requirement.criteria.entity.CriteriaType;
 import com.ires.story.dto.GeneratedUserStory;
 import com.ires.story.entity.UserStory;
@@ -217,6 +220,46 @@ public class MockAIAnalysisProvider implements AIAnalysisProvider {
                 )
             ));
             }
+
+        @Override
+        public SrsGenerationResponse generateSrs(SrsGenerationRequest request) {
+            if (!available) {
+                throw new IllegalStateException("AI analysis provider is unavailable.");
+            }
+            if (request == null || request.requirements() == null || request.requirements().isEmpty()) {
+                throw new IllegalArgumentException("At least one requirement is required to generate an SRS.");
+            }
+
+            List<String> functional = new ArrayList<>();
+            List<String> nonFunctional = new ArrayList<>();
+            List<String> business = new ArrayList<>();
+            List<String> technical = new ArrayList<>();
+            request.requirements().forEach(requirement -> {
+                String text = requirement.description() == null || requirement.description().isBlank()
+                        ? requirement.title()
+                        : requirement.description();
+                switch (requirement.requirementType()) {
+                    case FUNCTIONAL -> functional.add(text);
+                    case NON_FUNCTIONAL -> nonFunctional.add(text);
+                    case BUSINESS -> business.add(text);
+                    case TECHNICAL -> technical.add(text);
+                }
+            });
+
+            String projectName = request.projectName() == null || request.projectName().isBlank()
+                    ? "Project"
+                    : request.projectName();
+            return new SrsGenerationResponse(
+                    projectName + " Software Requirements Specification",
+                    "Draft specification for " + projectName + " based on " + request.requirements().size() + " requirements.",
+                    List.copyOf(functional),
+                    List.copyOf(nonFunctional),
+                    List.copyOf(business),
+                    List.copyOf(technical),
+                    List.of("The supplied project requirements represent the current project scope."),
+                    List.of()
+            );
+        }
 
     @Override
     public AIAnalysisResult analyze(Requirement requirement) {

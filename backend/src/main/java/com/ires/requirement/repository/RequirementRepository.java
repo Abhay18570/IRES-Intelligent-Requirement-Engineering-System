@@ -5,12 +5,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.UUID;
+import java.util.List;
 import java.util.Collection;
 import com.ires.requirement.entity.RequirementStatus;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RequirementRepository extends JpaRepository<Requirement, UUID>, JpaSpecificationExecutor<Requirement> {
+        List<Requirement> findByProjectId(UUID projectId);
+
     long countByStatus(RequirementStatus status);
 
     long countByAssignedToIdAndStatus(UUID userId, RequirementStatus status);

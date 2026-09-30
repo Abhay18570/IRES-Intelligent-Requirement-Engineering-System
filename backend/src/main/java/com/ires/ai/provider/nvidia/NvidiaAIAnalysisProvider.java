@@ -23,6 +23,8 @@ import com.ires.ai.dto.analysis.QualityAnalysisRequest;
 import com.ires.ai.dto.analysis.QualityAnalysisResponse;
 import com.ires.ai.dto.analysis.QualityDimension;
 import com.ires.ai.dto.analysis.RequirementImprovementResponse;
+import com.ires.ai.dto.srs.SrsGenerationRequest;
+import com.ires.ai.dto.srs.SrsGenerationResponse;
 import com.ires.ai.provider.nvidia.dto.NvidiaChatMessage;
 import com.ires.ai.provider.nvidia.dto.NvidiaChatRequest;
 import com.ires.ai.provider.nvidia.dto.NvidiaChatResponse;
@@ -1432,6 +1434,72 @@ public class NvidiaAIAnalysisProvider implements AIAnalysisProvider {
         return new AcceptanceCriteriaGenerationResponse(List.copyOf(criteria));
     }
 
+        @Override
+        public SrsGenerationResponse generateSrs(SrsGenerationRequest request) {
+                if (request == null || request.projectName() == null || request.projectName().isBlank()
+                                || request.requirements() == null || request.requirements().isEmpty()) {
+                        throw new IllegalArgumentException("Project information and requirements are required to generate an SRS.");
+                }
+
+                String context;
+                try {
+                        context = objectMapper.writeValueAsString(request);
+                } catch (JsonProcessingException exception) {
+                        throw new IllegalStateException("SRS generation context could not be serialized.", exception);
+                }
+
+                String systemPrompt = """
+                                You are a software requirements specification generation engine.
+
+                                Create a concise, internally consistent draft SRS using only the
+                                supplied project, requirement, user-story, and acceptance-criteria
+                                data. Do not invent behavior or claim unsupported constraints. Keep
+                                the supplied intent and distinguish functional, non-functional,
+                                business, and technical requirements. The generated document is a
+                                draft, not an approval or implementation decision.
+
+                                Respond ONLY with one JSON object using exactly this structure:
+                                {
+                                  "title": "Project Software Requirements Specification",
+                                  "overview": "Project purpose and scope",
+                                  "functionalRequirements": ["..."],
+                                  "nonFunctionalRequirements": ["..."],
+                                  "businessRequirements": ["..."],
+                                  "technicalRequirements": ["..."],
+                                  "assumptions": [],
+                                  "constraints": []
+                                }
+
+                                title and overview must be non-empty strings. Every section must be
+                                an array of non-empty strings; an array may be empty when the source
+                                contains no entries for that section. Do not include markdown or any
+                                text outside the JSON object.
+                                """;
+                NvidiaChatRequest chatRequest = new NvidiaChatRequest(
+                                resolveModel(),
+                                List.of(
+                                                new NvidiaChatMessage("system", systemPrompt),
+                                                new NvidiaChatMessage("user", "Generate a draft SRS from this project context JSON:\n" + context)
+                                )
+                );
+
+                JsonNode json = parseJson(extractContent(client.chatCompletion(chatRequest)));
+                String title = extractSrsText(json, "title", 300);
+                String overview = extractSrsText(json, "overview", 10000);
+                List<String> functional = extractSrsSection(json, "functionalRequirements");
+                List<String> nonFunctional = extractSrsSection(json, "nonFunctionalRequirements");
+                List<String> business = extractSrsSection(json, "businessRequirements");
+                List<String> technical = extractSrsSection(json, "technicalRequirements");
+                List<String> assumptions = extractSrsSection(json, "assumptions");
+                List<String> constraints = extractSrsSection(json, "constraints");
+                if (functional.isEmpty() && nonFunctional.isEmpty() && business.isEmpty() && technical.isEmpty()) {
+                        throw new IllegalStateException("NVIDIA SRS response did not contain any requirements.");
+                }
+
+                return new SrsGenerationResponse(
+                                title, overview, functional, nonFunctional, business, technical, assumptions, constraints);
+        }
+
     @Override
     public AIAnalysisResult analyze(Requirement requirement) {
         if (requirement == null) {
@@ -1744,6 +1812,31 @@ public class NvidiaAIAnalysisProvider implements AIAnalysisProvider {
                         );
                 }
                 return value;
+        }
+
+        private String extractSrsText(JsonNode json, String field, int maxLength) {
+                if (!json.has(field) || !json.get(field).isTextual() || json.get(field).asText().isBlank()) {
+                        throw new IllegalStateException("NVIDIA SRS response did not contain a valid " + field + ".");
+                }
+                String value = json.get(field).asText().trim();
+                if (value.length() > maxLength) {
+                        throw new IllegalStateException("NVIDIA SRS response exceeded the maximum length for " + field + ".");
+                }
+                return value;
+        }
+
+        private List<String> extractSrsSection(JsonNode json, String field) {
+                if (!json.has(field) || !json.get(field).isArray()) {
+                        throw new IllegalStateException("NVIDIA SRS response did not contain a valid " + field + " array.");
+                }
+                List<String> values = new ArrayList<>();
+                for (JsonNode valueNode : json.get(field)) {
+                        if (!valueNode.isTextual() || valueNode.asText().isBlank() || valueNode.asText().length() > 10000) {
+                                throw new IllegalStateException("NVIDIA SRS response contained an invalid entry in " + field + ".");
+                        }
+                        values.add(valueNode.asText().trim());
+                }
+                return List.copyOf(values);
         }
 
         private String nullToEmpty(String value) {

@@ -17,6 +17,8 @@ import com.ires.ai.dto.analysis.QualityAnalysisRequest;
 import com.ires.ai.dto.analysis.QualityAnalysisResponse;
 import com.ires.ai.dto.analysis.QualityDimension;
 import com.ires.ai.dto.analysis.RequirementImprovementResponse;
+import com.ires.ai.dto.srs.SrsGenerationRequest;
+import com.ires.ai.dto.srs.SrsGenerationResponse;
 import com.ires.ai.dto.analysis.ConflictDetectionRequest;
 import com.ires.ai.dto.analysis.ConflictDetectionResponse;
 import com.ires.ai.dto.analysis.ConflictFinding;
@@ -312,6 +314,79 @@ class NvidiaAIAnalysisProviderTest {
                                 assertThrows(IllegalStateException.class,
                                                                 () -> provider.generateAcceptanceCriteria(requirementForImprovement(), null));
                 }
+
+                    @Test
+                    void generateSrsReturnsStructuredSectionsAndUsesProjectContext() {
+                        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                                {
+                                  "title": "Checkout Software Requirements Specification",
+                                  "overview": "A web checkout service for shoppers.",
+                                  "functionalRequirements": ["The system shall allow guest checkout."],
+                                  "nonFunctionalRequirements": ["The checkout flow shall be available during business hours."],
+                                  "businessRequirements": ["Guest purchases shall not require account registration."],
+                                  "technicalRequirements": ["The service shall integrate with the configured payment provider."],
+                                  "assumptions": ["Payment provider credentials are configured."],
+                                  "constraints": []
+                                }
+                                """));
+
+                        SrsGenerationResponse response = provider.generateSrs(srsRequest());
+
+                        assertEquals("Checkout Software Requirements Specification", response.title());
+                        assertEquals("A web checkout service for shoppers.", response.overview());
+                        assertEquals(List.of("The system shall allow guest checkout."), response.functionalRequirements());
+                        assertEquals(List.of("The checkout flow shall be available during business hours."),
+                                response.nonFunctionalRequirements());
+                        assertEquals(List.of("Payment provider credentials are configured."), response.assumptions());
+                        verify(client).chatCompletion(argThat(request ->
+                                "test-model".equals(request.model())
+                                        && request.messages().get(1).content().contains("Checkout")
+                                        && request.messages().get(1).content().contains("As a shopper")));
+                    }
+
+                    @Test
+                    void generateSrsRejectsMalformedBlankAndEmptyResponses() {
+                        when(client.chatCompletion(any())).thenReturn(chatResponse("not valid json"));
+                        assertThrows(IllegalStateException.class, () -> provider.generateSrs(srsRequest()));
+
+                        when(client.chatCompletion(any())).thenReturn(chatResponse("   "));
+                        assertThrows(IllegalStateException.class, () -> provider.generateSrs(srsRequest()));
+
+                        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                                {
+                                  "title": "Draft SRS",
+                                  "overview": "Some overview.",
+                                  "functionalRequirements": [],
+                                  "nonFunctionalRequirements": [],
+                                  "businessRequirements": [],
+                                  "technicalRequirements": [],
+                                  "assumptions": [],
+                                  "constraints": []
+                                }
+                                """));
+                        assertThrows(IllegalStateException.class, () -> provider.generateSrs(srsRequest()));
+                    }
+
+                    private SrsGenerationRequest srsRequest() {
+                        return new SrsGenerationRequest(
+                                "Checkout",
+                                "A web checkout service.",
+                                List.of(new SrsGenerationRequest.RequirementContext(
+                                        UUID.randomUUID(),
+                                        "Guest checkout",
+                                        "Allow shoppers to purchase without an account.",
+                                        RequirementType.FUNCTIONAL,
+                                        RequirementPriority.MEDIUM,
+                                        RequirementStatus.ANALYSIS_COMPLETED,
+                                        List.of(new SrsGenerationRequest.UserStoryContext(
+                                                "Guest checkout", "Shopper purchases without registering.",
+                                                "As a shopper, I want guest checkout so that I can purchase quickly.")),
+                                        List.of(new SrsGenerationRequest.AcceptanceCriteriaContext(
+                                                "Guest purchase completes", "Given valid details, when submitted, then purchase completes.",
+                                                CriteriaType.BEHAVIORAL))
+                                ))
+                        );
+                    }
 
                 @Test
                 void classifyReturnsValidClassification() {

@@ -2,6 +2,8 @@ package com.ires.ai.service;
 
 import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
+import com.ires.ai.dto.srs.SrsGenerationRequest;
+import com.ires.ai.dto.srs.SrsGenerationResponse;
 import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
 import com.ires.requirement.entity.RequirementStatus;
@@ -102,4 +104,38 @@ class MockAIAnalysisProviderTest {
                                 .isInstanceOf(IllegalStateException.class)
                                 .hasMessage("AI analysis provider is unavailable.");
         }
+
+    @Test
+    void generatesDeterministicStructuredSrs() {
+        SrsGenerationRequest request = new SrsGenerationRequest(
+                "Checkout",
+                "Checkout project description.",
+                java.util.List.of(new SrsGenerationRequest.RequirementContext(
+                        UUID.randomUUID(),
+                        "Guest checkout",
+                        "Allow shoppers to purchase without an account.",
+                        RequirementType.FUNCTIONAL,
+                        RequirementPriority.MEDIUM,
+                        RequirementStatus.DRAFT,
+                        java.util.List.of(),
+                        java.util.List.of()
+                ))
+        );
+
+        SrsGenerationResponse response = new MockAIAnalysisProvider(true).generateSrs(request);
+
+        assertThat(response.title()).isEqualTo("Checkout Software Requirements Specification");
+        assertThat(response.overview()).contains("Checkout");
+        assertThat(response.functionalRequirements()).containsExactly("Allow shoppers to purchase without an account.");
+        assertThat(response.nonFunctionalRequirements()).isEmpty();
+        assertThat(response.assumptions()).isNotEmpty();
+    }
+
+    @Test
+    void mockSrsGenerationRejectsEmptyRequirementContext() {
+        SrsGenerationRequest request = new SrsGenerationRequest("Empty project", null, java.util.List.of());
+
+        assertThatThrownBy(() -> new MockAIAnalysisProvider(true).generateSrs(request))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

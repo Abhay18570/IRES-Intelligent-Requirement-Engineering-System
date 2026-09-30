@@ -3,6 +3,8 @@ package com.ires.ai.service;
 import com.ires.ai.dto.analysis.AmbiguityRequest;
 import com.ires.ai.dto.analysis.AmbiguityResponse;
 import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
+import com.ires.ai.dto.srs.SrsGenerationRequest;
+import com.ires.ai.dto.srs.SrsGenerationResponse;
 import com.ires.ai.dto.analysis.ClassificationRequest;
 import com.ires.ai.dto.analysis.ClassificationResponse;
 import com.ires.ai.dto.analysis.CompletenessRequest;
@@ -59,6 +61,10 @@ public interface AIAnalysisProvider {
             UserStory userStory
     ) {
         throw new UnsupportedOperationException("Acceptance criteria generation is not implemented.");
+    }
+
+    default SrsGenerationResponse generateSrs(SrsGenerationRequest request) {
+        throw new UnsupportedOperationException("SRS generation is not implemented.");
     }
 
     AIAnalysisResult analyze(Requirement requirement);
