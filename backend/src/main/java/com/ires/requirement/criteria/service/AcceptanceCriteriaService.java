@@ -3,6 +3,9 @@ package com.ires.requirement.criteria.service;
 import com.ires.common.exception.BadRequestException;
 import com.ires.common.exception.NotFoundException;
 import com.ires.common.exception.ForbiddenException;
+import com.ires.common.exception.ServiceUnavailableException;
+import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
+import com.ires.ai.service.AIAnalysisProvider;
 import com.ires.requirement.criteria.dto.AcceptanceCriteriaCreateRequest;
 import com.ires.requirement.criteria.dto.AcceptanceCriteriaResponse;
 import com.ires.requirement.criteria.dto.AcceptanceCriteriaUpdateRequest;
@@ -31,6 +34,7 @@ public class AcceptanceCriteriaService {
     private final AcceptanceCriteriaRepository criteriaRepository;
     private final RequirementService requirementService;
     private final UserStoryRepository userStoryRepository;
+    private final AIAnalysisProvider analysisProvider;
 
     @Transactional
     public AcceptanceCriteriaResponse create(
@@ -50,6 +54,51 @@ public class AcceptanceCriteriaService {
                 defaultStatus(request.status())
         );
         return AcceptanceCriteriaResponse.from(criteriaRepository.save(criteria));
+    }
+
+    @Transactional
+    public java.util.List<AcceptanceCriteriaResponse> generate(
+            UUID requirementId,
+            UUID userStoryId,
+            UserDetails principal
+    ) {
+        Requirement requirement = requirementService.findAccessibleRequirement(requirementId, principal);
+        assertAnalystOrAdmin(principal);
+        UserStory userStory = findStoryForRequirement(userStoryId, requirementId);
+
+        AcceptanceCriteriaGenerationResponse generated;
+        try {
+            generated = analysisProvider.generateAcceptanceCriteria(requirement, userStory);
+        } catch (RuntimeException exception) {
+            throw new ServiceUnavailableException("Acceptance criteria could not be generated.");
+        }
+
+        if (generated == null || generated.criteria() == null || generated.criteria().isEmpty()) {
+            throw new ServiceUnavailableException("Acceptance criteria could not be generated.");
+        }
+
+        java.util.List<AcceptanceCriteria> criteria = generated.criteria().stream()
+                .map(criterion -> {
+                    if (criterion == null || criterion.title() == null || criterion.title().isBlank()
+                            || criterion.title().length() > 300 || criterion.description() == null
+                            || criterion.description().isBlank() || criterion.description().length() > 10000
+                            || criterion.criteriaType() == null) {
+                        throw new ServiceUnavailableException("Acceptance criteria could not be generated.");
+                    }
+                    return new AcceptanceCriteria(
+                            requirement,
+                            userStory,
+                            criterion.title().trim(),
+                            criterion.description().trim(),
+                            criterion.criteriaType(),
+                            CriteriaStatus.DRAFT
+                    );
+                })
+                .toList();
+
+        return criteriaRepository.saveAll(criteria).stream()
+                .map(AcceptanceCriteriaResponse::from)
+                .toList();
     }
 
     public Page<AcceptanceCriteriaResponse> list(

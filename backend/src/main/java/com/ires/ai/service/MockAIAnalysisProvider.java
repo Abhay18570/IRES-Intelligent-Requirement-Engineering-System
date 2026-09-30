@@ -3,6 +3,7 @@ package com.ires.ai.service;
 import com.ires.ai.dto.analysis.AmbiguityFinding;
 import com.ires.ai.dto.analysis.AmbiguityRequest;
 import com.ires.ai.dto.analysis.AmbiguityResponse;
+import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
 import com.ires.ai.dto.analysis.ClassificationRequest;
 import com.ires.ai.dto.analysis.ClassificationResponse;
 import com.ires.ai.dto.analysis.CompletenessRequest;
@@ -21,7 +22,9 @@ import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.dto.analysis.RequirementCandidate;
 import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
+import com.ires.requirement.criteria.entity.CriteriaType;
 import com.ires.story.dto.GeneratedUserStory;
+import com.ires.story.entity.UserStory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -188,6 +191,32 @@ public class MockAIAnalysisProvider implements AIAnalysisProvider {
                 requirement.getPriority() == null ? RequirementPriority.MEDIUM : requirement.getPriority()
         );
     }
+
+            @Override
+            public AcceptanceCriteriaGenerationResponse generateAcceptanceCriteria(
+                Requirement requirement,
+                UserStory userStory
+            ) {
+            if (!available) {
+                throw new IllegalStateException("AI analysis provider is unavailable.");
+            }
+            String subject = userStory == null ? requirement.getTitle() : userStory.getTitle();
+            if (subject == null || subject.isBlank()) {
+                subject = "the requirement";
+            }
+            return new AcceptanceCriteriaGenerationResponse(List.of(
+                new AcceptanceCriteriaGenerationResponse.GeneratedCriterion(
+                    "Expected behavior is completed",
+                    "Given " + subject + " is available, when the expected action is performed, then the system completes the behavior described by the requirement.",
+                    CriteriaType.BEHAVIORAL
+                ),
+                new AcceptanceCriteriaGenerationResponse.GeneratedCriterion(
+                    "Invalid input is handled",
+                    "Given input does not satisfy the requirement, when the action is attempted, then the system rejects the input without completing the action.",
+                    CriteriaType.VALIDATION
+                )
+            ));
+            }
 
     @Override
     public AIAnalysisResult analyze(Requirement requirement) {

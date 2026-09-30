@@ -23,7 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -85,5 +87,27 @@ class AcceptanceCriteriaControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void businessAnalystCanGenerateCriteriaForOptionalStory() throws Exception {
+        UUID requirementId = UUID.randomUUID();
+        UUID userStoryId = UUID.randomUUID();
+        var request = new com.ires.requirement.criteria.dto.AcceptanceCriteriaGenerationRequest(userStoryId);
+
+        mockMvc.perform(post("/api/v1/requirements/" + requirementId + "/acceptance-criteria/generate")
+                        .with(user("analyst@example.com").roles("BUSINESS_ANALYST"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
+
+        verify(criteriaService).generate(eq(requirementId), eq(userStoryId), any());
+    }
+
+    @Test
+    void clientCannotGenerateAcceptanceCriteria() throws Exception {
+        mockMvc.perform(post("/api/v1/requirements/" + UUID.randomUUID() + "/acceptance-criteria/generate")
+                        .with(user("client@example.com").roles("CLIENT")))
+                .andExpect(status().isForbidden());
     }
 }

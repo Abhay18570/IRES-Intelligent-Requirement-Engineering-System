@@ -2,6 +2,7 @@ package com.ires.requirement.criteria.controller;
 
 import com.ires.common.response.ApiResponse;
 import com.ires.requirement.criteria.dto.AcceptanceCriteriaCreateRequest;
+import com.ires.requirement.criteria.dto.AcceptanceCriteriaGenerationRequest;
 import com.ires.requirement.criteria.dto.AcceptanceCriteriaResponse;
 import com.ires.requirement.criteria.dto.AcceptanceCriteriaUpdateRequest;
 import com.ires.requirement.criteria.service.AcceptanceCriteriaService;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -42,6 +44,18 @@ public class AcceptanceCriteriaController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
                 "Acceptance criteria created.", criteriaService.create(requirementId, request, principal)));
     }
+
+            @PostMapping("/api/v1/requirements/{requirementId}/acceptance-criteria/generate")
+            @PreAuthorize("hasAnyRole('ADMIN', 'BUSINESS_ANALYST')")
+            public ResponseEntity<ApiResponse<List<AcceptanceCriteriaResponse>>> generate(
+                @PathVariable UUID requirementId,
+                @Valid @RequestBody(required = false) AcceptanceCriteriaGenerationRequest request,
+                @AuthenticationPrincipal UserDetails principal
+            ) {
+            UUID userStoryId = request == null ? null : request.userStoryId();
+            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                "Acceptance criteria generated.", criteriaService.generate(requirementId, userStoryId, principal)));
+            }
 
     @GetMapping("/api/v1/requirements/{requirementId}/acceptance-criteria")
     @PreAuthorize("isAuthenticated()")

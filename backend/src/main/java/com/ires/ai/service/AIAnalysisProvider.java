@@ -2,6 +2,7 @@ package com.ires.ai.service;
 
 import com.ires.ai.dto.analysis.AmbiguityRequest;
 import com.ires.ai.dto.analysis.AmbiguityResponse;
+import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
 import com.ires.ai.dto.analysis.ClassificationRequest;
 import com.ires.ai.dto.analysis.ClassificationResponse;
 import com.ires.ai.dto.analysis.CompletenessRequest;
@@ -15,6 +16,7 @@ import com.ires.ai.dto.analysis.QualityAnalysisResponse;
 import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.requirement.entity.Requirement;
 import com.ires.story.dto.GeneratedUserStory;
+import com.ires.story.entity.UserStory;
 
 import java.math.BigDecimal;
 
@@ -50,6 +52,13 @@ public interface AIAnalysisProvider {
 
     default GeneratedUserStory generateUserStory(Requirement requirement) {
         throw new UnsupportedOperationException("User story generation is not implemented.");
+    }
+
+    default AcceptanceCriteriaGenerationResponse generateAcceptanceCriteria(
+            Requirement requirement,
+            UserStory userStory
+    ) {
+        throw new UnsupportedOperationException("Acceptance criteria generation is not implemented.");
     }
 
     AIAnalysisResult analyze(Requirement requirement);

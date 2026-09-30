@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ires.ai.dto.analysis.AmbiguityFinding;
 import com.ires.ai.dto.analysis.AmbiguityRequest;
 import com.ires.ai.dto.analysis.AmbiguityResponse;
+import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
 import com.ires.ai.dto.analysis.ClassificationRequest;
 import com.ires.ai.dto.analysis.ClassificationResponse;
 import com.ires.ai.dto.analysis.CompletenessRequest;
@@ -28,7 +29,9 @@ import com.ires.ai.provider.nvidia.dto.NvidiaChatResponse;
 import com.ires.ai.service.AIAnalysisProvider;
 import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
+import com.ires.requirement.criteria.entity.CriteriaType;
 import com.ires.story.dto.GeneratedUserStory;
+import com.ires.story.entity.UserStory;
 
 
 import java.math.BigDecimal;
@@ -1328,6 +1331,108 @@ public class NvidiaAIAnalysisProvider implements AIAnalysisProvider {
     }
 
     @Override
+    public AcceptanceCriteriaGenerationResponse generateAcceptanceCriteria(
+            Requirement requirement,
+            UserStory userStory
+    ) {
+        if (requirement == null) {
+            throw new IllegalArgumentException("Requirement must not be null.");
+        }
+
+        String storyContext = userStory == null
+                ? "No user story was selected. Base criteria on the requirement alone."
+                : "User story title: " + userStory.getTitle()
+                        + "\nUser story description: " + nullToEmpty(userStory.getDescription())
+                        + "\nUser story text: " + nullToEmpty(userStory.getStoryText());
+        String systemPrompt = """
+                You are a software acceptance criteria generation engine.
+
+                Generate 3 to 5 distinct, clear, objectively testable acceptance
+                criteria based only on the supplied requirement and optional user
+                story. Use Given/When/Then wording in each description. Do not invent
+                unsupported requirements, rules, values, or behavior. Give each
+                criterion a concise title. Use criteriaType FUNCTIONAL, BEHAVIORAL,
+                or VALIDATION as appropriate.
+
+                Respond ONLY with a JSON object in exactly this structure:
+                {
+                  "criteria": [
+                    {
+                      "title": "Successful behavior",
+                      "description": "Given ..., when ..., then ...",
+                      "criteriaType": "BEHAVIORAL"
+                    }
+                  ]
+                }
+
+                The criteria array must contain 1 to 10 objects. Every title and
+                description must be a non-empty string. A title may not exceed 300
+                characters; a description may not exceed 10000 characters.
+                criteriaType must be FUNCTIONAL, BEHAVIORAL, or VALIDATION.
+                Do not include markdown or text outside the JSON object.
+                """;
+        String userPrompt = """
+                Generate acceptance criteria for this requirement.
+
+                Requirement title:
+                %s
+
+                Requirement description:
+                %s
+
+                Requirement type: %s
+                Priority: %s
+
+                %s
+                """.formatted(
+                nullToEmpty(requirement.getTitle()),
+                nullToEmpty(requirement.getDescription()),
+                requirement.getRequirementType(),
+                requirement.getPriority(),
+                storyContext
+        );
+        NvidiaChatRequest chatRequest = new NvidiaChatRequest(
+                resolveModel(),
+                List.of(
+                        new NvidiaChatMessage("system", systemPrompt),
+                        new NvidiaChatMessage("user", userPrompt)
+                )
+        );
+
+        JsonNode json = parseJson(extractContent(client.chatCompletion(chatRequest)));
+        if (!json.has("criteria") || !json.get("criteria").isArray()
+                || json.get("criteria").isEmpty() || json.get("criteria").size() > 10) {
+            throw new IllegalStateException(
+                    "NVIDIA response did not contain a non-empty, valid criteria array."
+            );
+        }
+
+        List<AcceptanceCriteriaGenerationResponse.GeneratedCriterion> criteria = new ArrayList<>();
+        for (JsonNode criterionNode : json.get("criteria")) {
+            if (criterionNode == null || !criterionNode.isObject()) {
+                throw new IllegalStateException("NVIDIA returned an invalid acceptance criterion.");
+            }
+            String title = extractAcceptanceCriteriaField(criterionNode, "title", 300);
+            String description = extractAcceptanceCriteriaField(criterionNode, "description", 10000);
+            String criteriaTypeValue = extractAcceptanceCriteriaField(criterionNode, "criteriaType", 20)
+                    .toUpperCase(java.util.Locale.ROOT);
+            CriteriaType criteriaType;
+            try {
+                criteriaType = CriteriaType.valueOf(criteriaTypeValue);
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalStateException(
+                        "NVIDIA returned an unsupported acceptance criteria type: " + criteriaTypeValue,
+                        exception
+                );
+            }
+            criteria.add(new AcceptanceCriteriaGenerationResponse.GeneratedCriterion(
+                    title, description, criteriaType));
+        }
+
+        return new AcceptanceCriteriaGenerationResponse(List.copyOf(criteria));
+    }
+
+    @Override
     public AIAnalysisResult analyze(Requirement requirement) {
         if (requirement == null) {
                 throw new IllegalArgumentException("Requirement must not be null.");
@@ -1621,6 +1726,28 @@ public class NvidiaAIAnalysisProvider implements AIAnalysisProvider {
                         );
                 }
                 return value;
+        }
+
+        private String extractAcceptanceCriteriaField(JsonNode node, String field, int maxLength) {
+                if (!node.has(field)
+                                || node.get(field).isNull()
+                                || !node.get(field).isTextual()
+                                || node.get(field).asText().isBlank()) {
+                        throw new IllegalStateException(
+                                        "NVIDIA acceptance criteria response did not contain a valid " + field + "."
+                        );
+                }
+                String value = node.get(field).asText().trim();
+                if (value.length() > maxLength) {
+                        throw new IllegalStateException(
+                                        "NVIDIA acceptance criteria response exceeded the maximum length for " + field + "."
+                        );
+                }
+                return value;
+        }
+
+        private String nullToEmpty(String value) {
+                return value == null ? "" : value;
         }
 
 

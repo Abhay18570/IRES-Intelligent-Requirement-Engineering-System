@@ -1,10 +1,12 @@
 package com.ires.ai.service;
 
 import com.ires.ai.dto.analysis.RequirementImprovementResponse;
+import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
 import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
 import com.ires.requirement.entity.RequirementStatus;
 import com.ires.requirement.entity.RequirementType;
+import com.ires.requirement.criteria.entity.CriteriaType;
 import com.ires.story.dto.GeneratedUserStory;
 import org.junit.jupiter.api.Test;
 
@@ -73,4 +75,31 @@ class MockAIAnalysisProviderTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("AI analysis provider is unavailable.");
     }
+
+        @Test
+        void generatesDeterministicAcceptanceCriteriaFromRequirement() {
+                Requirement requirement = new Requirement(null, "Guest checkout", "Allow guest purchases.",
+                                RequirementType.FUNCTIONAL, RequirementPriority.MEDIUM, RequirementStatus.DRAFT,
+                                "TEST", null, null);
+                MockAIAnalysisProvider provider = new MockAIAnalysisProvider(true);
+
+                AcceptanceCriteriaGenerationResponse response = provider.generateAcceptanceCriteria(requirement, null);
+
+                assertThat(response.criteria()).hasSize(2);
+                assertThat(response.criteria().get(0).title()).isEqualTo("Expected behavior is completed");
+                assertThat(response.criteria().get(0).description()).contains("Given Guest checkout is available");
+                assertThat(response.criteria().get(0).criteriaType()).isEqualTo(CriteriaType.BEHAVIORAL);
+        }
+
+        @Test
+        void reportsUnavailableProviderWhenMockCriteriaGenerationIsDisabled() {
+                MockAIAnalysisProvider provider = new MockAIAnalysisProvider(false);
+                Requirement requirement = new Requirement(null, "Guest checkout", "Allow guest purchases.",
+                                RequirementType.FUNCTIONAL, RequirementPriority.MEDIUM, RequirementStatus.DRAFT,
+                                "TEST", null, null);
+
+                assertThatThrownBy(() -> provider.generateAcceptanceCriteria(requirement, null))
+                                .isInstanceOf(IllegalStateException.class)
+                                .hasMessage("AI analysis provider is unavailable.");
+        }
 }

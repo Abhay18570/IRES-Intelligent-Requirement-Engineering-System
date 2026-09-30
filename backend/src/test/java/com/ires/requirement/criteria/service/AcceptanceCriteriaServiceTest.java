@@ -2,6 +2,9 @@ package com.ires.requirement.criteria.service;
 
 import com.ires.common.exception.BadRequestException;
 import com.ires.common.exception.NotFoundException;
+import com.ires.common.exception.ServiceUnavailableException;
+import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
+import com.ires.ai.service.AIAnalysisProvider;
 import com.ires.project.entity.Project;
 import com.ires.project.entity.ProjectStatus;
 import com.ires.project.service.ProjectService;
@@ -35,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class AcceptanceCriteriaServiceTest {
@@ -50,6 +55,9 @@ class AcceptanceCriteriaServiceTest {
 
     @Mock
     private UserStoryRepository userStoryRepository;
+
+        @Mock
+        private AIAnalysisProvider analysisProvider;
 
     @Mock
     private UserDetails principal;
@@ -108,6 +116,52 @@ class AcceptanceCriteriaServiceTest {
         assertThatThrownBy(() -> criteriaService.create(requirement.getId(), new AcceptanceCriteriaCreateRequest(
                 storyId, "Criterion", null, null, null), principal))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void generatesAndAppendsCriteriaForRequirementAndStory() {
+        Requirement requirement = requirement();
+        UserStory story = new UserStory(requirement, "Checkout story", "Shopper checks out",
+                "As a shopper, I want guest checkout.", RequirementPriority.MEDIUM,
+                StoryStatus.DRAFT, requirement.getCreatedBy());
+        story.setId(UUID.randomUUID());
+        when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+        when(userStoryRepository.findById(story.getId())).thenReturn(Optional.of(story));
+        when(analysisProvider.generateAcceptanceCriteria(requirement, story)).thenReturn(
+                new AcceptanceCriteriaGenerationResponse(java.util.List.of(
+                        new AcceptanceCriteriaGenerationResponse.GeneratedCriterion(
+                                "Checkout succeeds", "Given valid details, when submitted, then checkout succeeds.",
+                                CriteriaType.BEHAVIORAL),
+                        new AcceptanceCriteriaGenerationResponse.GeneratedCriterion(
+                                "Invalid details are rejected", "Given invalid details, when submitted, then checkout is rejected.",
+                                CriteriaType.VALIDATION)
+                )));
+        when(criteriaRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var responses = criteriaService.generate(requirement.getId(), story.getId(), principal);
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses).allSatisfy(response -> {
+            assertThat(response.requirementId()).isEqualTo(requirement.getId());
+            assertThat(response.userStoryId()).isEqualTo(story.getId());
+            assertThat(response.status()).isEqualTo(CriteriaStatus.DRAFT);
+        });
+        assertThat(responses.get(0).title()).isEqualTo("Checkout succeeds");
+        verify(analysisProvider).generateAcceptanceCriteria(requirement, story);
+        verify(criteriaRepository).saveAll(any());
+        verify(criteriaRepository, never()).delete(any(AcceptanceCriteria.class));
+    }
+
+    @Test
+    void doesNotPersistWhenProviderReturnsNoCriteria() {
+        Requirement requirement = requirement();
+        when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+        when(analysisProvider.generateAcceptanceCriteria(requirement, null)).thenReturn(
+                new AcceptanceCriteriaGenerationResponse(java.util.List.of()));
+
+        assertThatThrownBy(() -> criteriaService.generate(requirement.getId(), null, principal))
+                .isInstanceOf(ServiceUnavailableException.class);
+        verify(criteriaRepository, never()).saveAll(any());
     }
 
     private Requirement requirement() {

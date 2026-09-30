@@ -3,6 +3,7 @@ package com.ires.ai.provider.nvidia;
 import com.ires.ai.dto.analysis.AmbiguityFinding;
 import com.ires.ai.dto.analysis.AmbiguityRequest;
 import com.ires.ai.dto.analysis.AmbiguityResponse;
+import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
 import com.ires.ai.dto.analysis.ClassificationRequest;
 import com.ires.ai.dto.analysis.ClassificationResponse;
 import com.ires.ai.dto.analysis.CompletenessRequest;
@@ -26,6 +27,7 @@ import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
 import com.ires.requirement.entity.RequirementStatus;
 import com.ires.requirement.entity.RequirementType;
+import com.ires.requirement.criteria.entity.CriteriaType;
 import com.ires.story.dto.GeneratedUserStory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -239,8 +241,80 @@ class NvidiaAIAnalysisProviderTest {
                 () -> provider.generateUserStory(requirementForImprovement()));
     }
 
-    @Test
-    void classifyReturnsValidClassification() {
+                @Test
+                void generateAcceptanceCriteriaParsesStructuredCriteria() {
+                                Requirement requirement = requirementForImprovement();
+                                when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                                                                {
+                                                                        "criteria": [
+                                                                                {
+                                                                                        "title": "Guest checkout succeeds",
+                                                                                        "description": "Given a shopper has valid purchase details, when checkout is submitted, then the purchase is completed without account registration.",
+                                                                                        "criteriaType": "BEHAVIORAL"
+                                                                                },
+                                                                                {
+                                                                                        "title": "Invalid details are rejected",
+                                                                                        "description": "Given purchase details are invalid, when checkout is submitted, then the purchase is not completed.",
+                                                                                        "criteriaType": "VALIDATION"
+                                                                                }
+                                                                        ]
+                                                                }
+                                                                """));
+
+                                AcceptanceCriteriaGenerationResponse response = provider.generateAcceptanceCriteria(requirement, null);
+
+                                assertEquals(2, response.criteria().size());
+                                assertEquals("Guest checkout succeeds", response.criteria().get(0).title());
+                                assertEquals("Given a shopper has valid purchase details, when checkout is submitted, then the purchase is completed without account registration.",
+                                                                response.criteria().get(0).description());
+                                assertEquals(CriteriaType.BEHAVIORAL, response.criteria().get(0).criteriaType());
+                                assertEquals(CriteriaType.VALIDATION, response.criteria().get(1).criteriaType());
+                                verify(client).chatCompletion(argThat(request ->
+                                                                "test-model".equals(request.model())
+                                                                                                && request.messages().get(1).content().contains("Original title")));
+                }
+
+                @Test
+                void generateAcceptanceCriteriaRejectsEmptyCriteriaArray() {
+                                when(client.chatCompletion(any())).thenReturn(chatResponse("{\"criteria\": []}"));
+
+                                assertThrows(IllegalStateException.class,
+                                                                () -> provider.generateAcceptanceCriteria(requirementForImprovement(), null));
+                }
+
+                @Test
+                void generateAcceptanceCriteriaRejectsBlankFieldsAndInvalidTypes() {
+                                when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                                                                {
+                                                                        "criteria": [
+                                                                                {
+                                                                                        "title": " ",
+                                                                                        "description": "Given ..., when ..., then ...",
+                                                                                        "criteriaType": "FUNCTIONAL"
+                                                                                }
+                                                                        ]
+                                                                }
+                                                                """));
+                                assertThrows(IllegalStateException.class,
+                                                                () -> provider.generateAcceptanceCriteria(requirementForImprovement(), null));
+
+                                when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                                                                {
+                                                                        "criteria": [
+                                                                                {
+                                                                                        "title": "Valid title",
+                                                                                        "description": "Given ..., when ..., then ...",
+                                                                                        "criteriaType": "SECURITY"
+                                                                                }
+                                                                        ]
+                                                                }
+                                                                """));
+                                assertThrows(IllegalStateException.class,
+                                                                () -> provider.generateAcceptanceCriteria(requirementForImprovement(), null));
+                }
+
+                @Test
+                void classifyReturnsValidClassification() {
         NvidiaChatResponse response = chatResponse(
                 "{\"classification\": \"FUNCTIONAL\", \"confidence\": 0.94, \"reason\": \"Describes system behavior.\"}"
         );
