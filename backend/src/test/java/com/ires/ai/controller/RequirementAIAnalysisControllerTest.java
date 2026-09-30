@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.mockito.ArgumentMatchers.any;
@@ -78,6 +79,20 @@ class RequirementAIAnalysisControllerTest {
     @Test
     void rejectsClientAnalysisAccess() throws Exception {
         mockMvc.perform(get("/api/v1/requirements/" + UUID.randomUUID() + "/ai-analysis")
+                        .with(user("client@example.com").roles("CLIENT")))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void allowsBusinessAnalystToRequestRequirementImprovement() throws Exception {
+        mockMvc.perform(post("/api/v1/requirements/" + UUID.randomUUID() + "/ai/improve")
+                        .with(user("analyst@example.com").roles("BUSINESS_ANALYST")))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void rejectsClientRequirementImprovementAccess() throws Exception {
+        mockMvc.perform(post("/api/v1/requirements/" + UUID.randomUUID() + "/ai/improve")
                         .with(user("client@example.com").roles("CLIENT")))
                 .andExpect(status().isForbidden());
     }

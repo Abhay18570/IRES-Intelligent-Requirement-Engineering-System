@@ -1,6 +1,7 @@
 package com.ires.ai.controller;
 
 import com.ires.ai.dto.AIAnalysisResponse;
+import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.dto.analysis.AmbiguityResponse;
 import com.ires.ai.dto.analysis.CandidateRequirementsRequest;
 import com.ires.ai.dto.analysis.ClassificationResponse;
@@ -23,7 +24,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -52,6 +52,18 @@ public class RequirementAIAnalysisController {
     ) {
         return ApiResponse.success("AI analysis loaded.", analysisService.get(requirementId, principal));
     }
+
+        @PostMapping("/api/v1/requirements/{requirementId}/ai/improve")
+        @PreAuthorize("hasAnyRole('ADMIN', 'BUSINESS_ANALYST')")
+        public ApiResponse<RequirementImprovementResponse> improveRequirement(
+                        @PathVariable UUID requirementId,
+                        @AuthenticationPrincipal UserDetails principal
+        ) {
+                return ApiResponse.success(
+                                "Requirement improvement proposal generated.",
+                                analysisService.improveRequirement(requirementId, principal)
+                );
+        }
 
     @PostMapping("/api/v1/requirements/{requirementId}/ai/classify")
     @PreAuthorize("hasAnyRole('ADMIN', 'BUSINESS_ANALYST')")

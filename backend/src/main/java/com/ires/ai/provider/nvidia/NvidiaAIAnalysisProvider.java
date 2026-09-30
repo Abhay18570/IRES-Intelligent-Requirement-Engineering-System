@@ -21,11 +21,14 @@ import com.ires.ai.dto.analysis.RequirementCandidate;
 import com.ires.ai.dto.analysis.QualityAnalysisRequest;
 import com.ires.ai.dto.analysis.QualityAnalysisResponse;
 import com.ires.ai.dto.analysis.QualityDimension;
+import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.provider.nvidia.dto.NvidiaChatMessage;
 import com.ires.ai.provider.nvidia.dto.NvidiaChatRequest;
 import com.ires.ai.provider.nvidia.dto.NvidiaChatResponse;
 import com.ires.ai.service.AIAnalysisProvider;
 import com.ires.requirement.entity.Requirement;
+import com.ires.requirement.entity.RequirementPriority;
+import com.ires.story.dto.GeneratedUserStory;
 
 
 import java.math.BigDecimal;
@@ -1181,6 +1184,150 @@ public class NvidiaAIAnalysisProvider implements AIAnalysisProvider {
     }
 
     @Override
+    public RequirementImprovementResponse improveRequirement(Requirement requirement) {
+        if (requirement == null) {
+            throw new IllegalArgumentException("Requirement must not be null.");
+        }
+
+        String originalTitle = requirement.getTitle() == null ? "" : requirement.getTitle();
+        String originalDescription = requirement.getDescription() == null ? "" : requirement.getDescription();
+        String systemPrompt = """
+                You are a software requirements improvement engine.
+
+                Improve the supplied requirement while preserving its original intent.
+                Make wording clear, specific, atomic, and objectively verifiable when
+                the supplied information supports doing so. Do not invent business
+                rules, behavior, limits, or constraints that are not supported by the
+                requirement. Keep the title concise and put the complete requirement
+                statement in the description.
+
+                Respond ONLY with a JSON object in exactly this structure:
+                {
+                  "proposedTitle": "Improved requirement title",
+                  "proposedDescription": "Improved requirement description",
+                  "rationale": "Brief explanation of the changes",
+                  "confidence": 0.90
+                }
+
+                All text fields must be non-empty strings. Confidence must be a number
+                between 0.0 and 1.0. Do not include markdown or text outside the JSON.
+                """;
+        String userPrompt = """
+                Improve this software requirement.
+
+                Title:
+                %s
+
+                Description:
+                %s
+
+                Requirement type: %s
+                Priority: %s
+                """.formatted(
+                originalTitle,
+                originalDescription,
+                requirement.getRequirementType(),
+                requirement.getPriority()
+        );
+
+        NvidiaChatRequest chatRequest = new NvidiaChatRequest(
+                resolveModel(),
+                List.of(
+                        new NvidiaChatMessage("system", systemPrompt),
+                        new NvidiaChatMessage("user", userPrompt)
+                )
+        );
+        NvidiaChatResponse chatResponse = client.chatCompletion(chatRequest);
+        JsonNode json = parseJson(extractContent(chatResponse));
+
+        String proposedTitle = extractImprovementField(json, "proposedTitle");
+        String proposedDescription = extractImprovementField(json, "proposedDescription");
+        String rationale = extractImprovementField(json, "rationale");
+        BigDecimal confidence = extractConfidence(json);
+
+        return new RequirementImprovementResponse(
+                requirement.getId(),
+                originalTitle,
+                proposedTitle,
+                requirement.getDescription(),
+                proposedDescription,
+                rationale,
+                confidence
+        );
+    }
+
+    @Override
+    public GeneratedUserStory generateUserStory(Requirement requirement) {
+        if (requirement == null) {
+            throw new IllegalArgumentException("Requirement must not be null.");
+        }
+
+        String systemPrompt = """
+                You are a software requirements user story generation engine.
+
+                Generate one clear, concise user story grounded only in the supplied
+                requirement. Preserve its intent and do not invent unsupported actors,
+                behavior, business rules, constraints, or benefits. Write storyText in
+                the format "As a [role], I want [capability] so that [benefit]".
+                Provide a concise title and description. Select the priority from the
+                supplied requirement; do not change it.
+
+                Respond ONLY with a JSON object in exactly this structure:
+                {
+                  "title": "User story title",
+                  "description": "Concise story description",
+                  "storyText": "As a user, I want ... so that ...",
+                  "priority": "MEDIUM"
+                }
+
+                All text fields must be non-empty strings. priority must be one of
+                LOW, MEDIUM, HIGH, CRITICAL. Do not include markdown or any text
+                outside the JSON object.
+                """;
+        String userPrompt = """
+                Generate a user story for this requirement.
+
+                Requirement title:
+                %s
+
+                Requirement description:
+                %s
+
+                Requirement type: %s
+                Requirement priority: %s
+                """.formatted(
+                requirement.getTitle() == null ? "" : requirement.getTitle(),
+                requirement.getDescription() == null ? "" : requirement.getDescription(),
+                requirement.getRequirementType(),
+                requirement.getPriority()
+        );
+        NvidiaChatRequest chatRequest = new NvidiaChatRequest(
+                resolveModel(),
+                List.of(
+                        new NvidiaChatMessage("system", systemPrompt),
+                        new NvidiaChatMessage("user", userPrompt)
+                )
+        );
+
+        JsonNode json = parseJson(extractContent(client.chatCompletion(chatRequest)));
+        String title = extractStoryField(json, "title", 300);
+        String description = extractStoryField(json, "description", 10000);
+        String storyText = extractStoryField(json, "storyText", 10000);
+        String priorityValue = extractStoryField(json, "priority", 10).toUpperCase(java.util.Locale.ROOT);
+        RequirementPriority priority;
+        try {
+            priority = RequirementPriority.valueOf(priorityValue);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException(
+                    "NVIDIA user story response contained an invalid priority: " + priorityValue,
+                    exception
+            );
+        }
+
+        return new GeneratedUserStory(title, description, storyText, priority);
+    }
+
+    @Override
     public AIAnalysisResult analyze(Requirement requirement) {
         if (requirement == null) {
                 throw new IllegalArgumentException("Requirement must not be null.");
@@ -1445,6 +1592,36 @@ public class NvidiaAIAnalysisProvider implements AIAnalysisProvider {
 
         return node.get(field).asText().trim();
     }
+
+        private String extractImprovementField(JsonNode json, String field) {
+                if (!json.has(field)
+                                || json.get(field).isNull()
+                                || !json.get(field).isTextual()
+                                || json.get(field).asText().isBlank()) {
+                        throw new IllegalStateException(
+                                        "NVIDIA improvement response did not contain a valid " + field + "."
+                        );
+                }
+                return json.get(field).asText().trim();
+        }
+
+        private String extractStoryField(JsonNode json, String field, int maxLength) {
+                if (!json.has(field)
+                                || json.get(field).isNull()
+                                || !json.get(field).isTextual()
+                                || json.get(field).asText().isBlank()) {
+                        throw new IllegalStateException(
+                                        "NVIDIA user story response did not contain a valid " + field + "."
+                        );
+                }
+                String value = json.get(field).asText().trim();
+                if (value.length() > maxLength) {
+                        throw new IllegalStateException(
+                                        "NVIDIA user story response exceeded the maximum length for " + field + "."
+                        );
+                }
+                return value;
+        }
 
 
     private BigDecimal extractConfidence(JsonNode json) {

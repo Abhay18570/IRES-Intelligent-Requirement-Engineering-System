@@ -2,7 +2,9 @@ package com.ires.ai.service;
 
 import com.ires.ai.entity.AnalysisStatus;
 import com.ires.ai.entity.RequirementAIAnalysis;
+import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.repository.RequirementAIAnalysisRepository;
+import com.ires.common.exception.ServiceUnavailableException;
 import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
 import com.ires.requirement.entity.RequirementStatus;
@@ -24,6 +26,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -89,6 +93,38 @@ class RequirementAIAnalysisServiceTest {
                 () -> analysisService.analyze(requirementId, principal)))
                 .isInstanceOf(com.ires.common.exception.NotFoundException.class);
     }
+
+        @Test
+        void improvementReturnsProposalWithoutPersistingOrUpdatingRequirement() {
+                Requirement requirement = requirement();
+                RequirementImprovementResponse proposal = new RequirementImprovementResponse(
+                                requirement.getId(), requirement.getTitle(), "Improved title", requirement.getDescription(),
+                                "Improved description", "Clarified the behavior.", new BigDecimal("0.91"));
+                when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+                when(analysisProvider.improveRequirement(requirement)).thenReturn(proposal);
+
+                RequirementImprovementResponse response = analysisService.improveRequirement(requirement.getId(), principal);
+
+                assertThat(response).isEqualTo(proposal);
+                assertThat(requirement.getTitle()).isEqualTo("Guest checkout");
+                assertThat(requirement.getDescription()).isEqualTo("Details");
+                verify(requirementService).findAccessibleRequirement(requirement.getId(), principal);
+                verify(analysisProvider).improveRequirement(requirement);
+                verifyNoInteractions(analysisRepository);
+        }
+
+        @Test
+        void improvementMapsProviderFailureToServiceUnavailable() {
+                Requirement requirement = requirement();
+                when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+                when(analysisProvider.improveRequirement(requirement)).thenThrow(new IllegalStateException("offline"));
+
+                assertThat(org.assertj.core.api.Assertions.catchThrowable(
+                                () -> analysisService.improveRequirement(requirement.getId(), principal)))
+                                .isInstanceOf(ServiceUnavailableException.class)
+                                .hasMessage("Requirement improvement could not be completed.");
+                verifyNoInteractions(analysisRepository);
+        }
 
     private Requirement requirement() {
         User owner = new User("Test", "User", "owner@example.com", "hash", null);

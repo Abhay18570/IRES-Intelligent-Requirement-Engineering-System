@@ -84,4 +84,11 @@ class UserStoryControllerTest {
                         .with(user("client@example.com").roles("BUSINESS_ANALYST")))
                 .andExpect(status().isServiceUnavailable());
     }
+
+    @Test
+    void businessAnalystCanGenerateUserStory() throws Exception {
+        mockMvc.perform(post("/api/v1/requirements/" + UUID.randomUUID() + "/user-stories/generate")
+                        .with(user("analyst@example.com").roles("BUSINESS_ANALYST")))
+                .andExpect(status().isCreated());
+    }
 }

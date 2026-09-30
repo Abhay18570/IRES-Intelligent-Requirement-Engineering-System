@@ -88,14 +88,7 @@ public class UserStoryService {
         User creator = projectService.currentUser(principal);
         GeneratedUserStory generated;
         try {
-            AIAnalysisProvider.AIAnalysisResult analysis = analysisProvider.analyze(requirement);
-            generated = new GeneratedUserStory(
-                    "Implement " + requirement.getTitle(),
-                    analysis.summary(),
-                    "As a user, I want " + requirement.getTitle()
-                            + " so that the requirement delivers its intended value.",
-                    requirement.getPriority()
-            );
+            generated = analysisProvider.generateUserStory(requirement);
         } catch (RuntimeException exception) {
             throw new ServiceUnavailableException("The AI provider is currently unavailable.");
         }

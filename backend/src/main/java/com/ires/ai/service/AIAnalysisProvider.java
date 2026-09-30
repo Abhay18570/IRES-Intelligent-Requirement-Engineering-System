@@ -12,7 +12,9 @@ import com.ires.ai.dto.analysis.DuplicateDetectionRequest;
 import com.ires.ai.dto.analysis.DuplicateDetectionResponse;
 import com.ires.ai.dto.analysis.QualityAnalysisRequest;
 import com.ires.ai.dto.analysis.QualityAnalysisResponse;
+import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.requirement.entity.Requirement;
+import com.ires.story.dto.GeneratedUserStory;
 
 import java.math.BigDecimal;
 
@@ -40,6 +42,14 @@ public interface AIAnalysisProvider {
 
     default ConflictDetectionResponse detectConflicts(ConflictDetectionRequest request) {
         throw new UnsupportedOperationException("Conflict detection is not implemented.");
+    }
+
+    default RequirementImprovementResponse improveRequirement(Requirement requirement) {
+        throw new UnsupportedOperationException("Requirement improvement is not implemented.");
+    }
+
+    default GeneratedUserStory generateUserStory(Requirement requirement) {
+        throw new UnsupportedOperationException("User story generation is not implemented.");
     }
 
     AIAnalysisResult analyze(Requirement requirement);

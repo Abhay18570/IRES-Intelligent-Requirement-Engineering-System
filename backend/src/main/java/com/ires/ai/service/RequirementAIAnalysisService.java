@@ -3,6 +3,7 @@ package com.ires.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ires.ai.dto.AIAnalysisResponse;
+import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.dto.analysis.AmbiguityRequest;
 import com.ires.ai.dto.analysis.AmbiguityResponse;
 import com.ires.ai.dto.analysis.ClassificationRequest;
@@ -255,6 +256,15 @@ public class RequirementAIAnalysisService {
         return analysisRepository.findByRequirementId(requirementId)
                 .map(AIAnalysisResponse::from)
                 .orElseThrow(() -> new NotFoundException("AI analysis not found."));
+    }
+
+    public RequirementImprovementResponse improveRequirement(UUID requirementId, UserDetails principal) {
+        Requirement requirement = requirementService.findAccessibleRequirement(requirementId, principal);
+        try {
+            return analysisProvider.improveRequirement(requirement);
+        } catch (RuntimeException exception) {
+            throw new ServiceUnavailableException("Requirement improvement could not be completed.");
+        }
     }
 
     private Requirement findRequirement(UUID requirementId) {

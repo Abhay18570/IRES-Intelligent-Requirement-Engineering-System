@@ -15,6 +15,7 @@ import com.ires.ai.dto.analysis.MissingInformation;
 import com.ires.ai.dto.analysis.QualityAnalysisRequest;
 import com.ires.ai.dto.analysis.QualityAnalysisResponse;
 import com.ires.ai.dto.analysis.QualityDimension;
+import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.dto.analysis.ConflictDetectionRequest;
 import com.ires.ai.dto.analysis.ConflictDetectionResponse;
 import com.ires.ai.dto.analysis.ConflictFinding;
@@ -25,6 +26,7 @@ import com.ires.requirement.entity.Requirement;
 import com.ires.requirement.entity.RequirementPriority;
 import com.ires.requirement.entity.RequirementStatus;
 import com.ires.requirement.entity.RequirementType;
+import com.ires.story.dto.GeneratedUserStory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -91,6 +93,151 @@ class NvidiaAIAnalysisProviderTest {
 
         verify(client).chatCompletion(any(NvidiaChatRequest.class));
         }
+
+    @Test
+    void improveRequirementReturnsCasePreservingProposal() {
+        UUID requirementId = UUID.randomUUID();
+        Requirement requirement = new Requirement(
+                null,
+                "Account access",
+                "Users can sign in quickly.",
+                RequirementType.FUNCTIONAL,
+                RequirementPriority.HIGH,
+                RequirementStatus.DRAFT,
+                "TEST",
+                null,
+                null
+        );
+        requirement.setId(requirementId);
+        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                {
+                  "proposedTitle": "Authenticate registered users",
+                  "proposedDescription": "The system shall allow registered users to sign in using their email and password.",
+                  "rationale": "Replaced vague wording with the specified authentication behavior.",
+                  "confidence": 0.93
+                }
+                """));
+
+        RequirementImprovementResponse response = provider.improveRequirement(requirement);
+
+        assertEquals(requirementId, response.requirementId());
+        assertEquals("Account access", response.originalTitle());
+        assertEquals("Authenticate registered users", response.proposedTitle());
+        assertEquals("Users can sign in quickly.", response.originalDescription());
+        assertEquals("The system shall allow registered users to sign in using their email and password.",
+                response.proposedDescription());
+        assertEquals("Replaced vague wording with the specified authentication behavior.", response.rationale());
+        assertEquals(new BigDecimal("0.93"), response.confidence());
+        verify(client).chatCompletion(argThat(request ->
+                "test-model".equals(request.model())
+                        && request.messages().get(1).content().contains("Users can sign in quickly.")));
+    }
+
+    @Test
+    void improveRequirementRejectsBlankProposalText() {
+        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                {
+                  "proposedTitle": " ",
+                  "proposedDescription": "A nonblank description.",
+                  "rationale": "A rationale.",
+                  "confidence": 0.8
+                }
+                """));
+
+        assertThrows(IllegalStateException.class, () -> provider.improveRequirement(requirementForImprovement()));
+    }
+
+    @Test
+    void improveRequirementRejectsMissingProposalFields() {
+        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                {
+                  "proposedTitle": "Improved title",
+                  "proposedDescription": "Improved description",
+                  "confidence": 0.8
+                }
+                """));
+
+        assertThrows(IllegalStateException.class, () -> provider.improveRequirement(requirementForImprovement()));
+    }
+
+    @Test
+    void improveRequirementRejectsConfidenceOutsideRange() {
+        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                {
+                  "proposedTitle": "Improved title",
+                  "proposedDescription": "Improved description",
+                  "rationale": "A rationale.",
+                  "confidence": 1.1
+                }
+                """));
+
+        assertThrows(IllegalStateException.class, () -> provider.improveRequirement(requirementForImprovement()));
+    }
+
+    private Requirement requirementForImprovement() {
+        Requirement requirement = new Requirement(
+                null, "Original title", "Original description", RequirementType.FUNCTIONAL,
+                RequirementPriority.MEDIUM, RequirementStatus.DRAFT, "TEST", null, null);
+        requirement.setId(UUID.randomUUID());
+        return requirement;
+    }
+
+    @Test
+    void generateUserStoryReturnsStructuredStoryAndPreservesTextCasing() {
+        Requirement requirement = new Requirement(
+                null, "Guest checkout", "Allow shoppers to purchase without creating an account.",
+                RequirementType.FUNCTIONAL, RequirementPriority.HIGH, RequirementStatus.DRAFT,
+                "TEST", null, null);
+        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                {
+                  "title": "Guest checkout",
+                  "description": "A shopper completes a purchase without registering.",
+                  "storyText": "As a Shopper, I want guest checkout so that I can buy without creating an account.",
+                  "priority": "HIGH"
+                }
+                """));
+
+        GeneratedUserStory result = provider.generateUserStory(requirement);
+
+        assertEquals("Guest checkout", result.title());
+        assertEquals("A shopper completes a purchase without registering.", result.description());
+        assertEquals("As a Shopper, I want guest checkout so that I can buy without creating an account.",
+                result.storyText());
+        assertEquals(RequirementPriority.HIGH, result.priority());
+        verify(client).chatCompletion(argThat(request ->
+                "test-model".equals(request.model())
+                        && request.messages().get(1).content().contains("Guest checkout")));
+    }
+
+    @Test
+    void generateUserStoryRejectsBlankFields() {
+        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                {
+                  "title": "Guest checkout",
+                  "description": "   ",
+                  "storyText": "As a shopper, I want guest checkout so that I can purchase.",
+                  "priority": "MEDIUM"
+                }
+                """));
+
+        assertThrows(IllegalStateException.class,
+                () -> provider.generateUserStory(requirementForImprovement()));
+    }
+
+    @Test
+    void generateUserStoryRejectsInvalidPriority() {
+        when(client.chatCompletion(any())).thenReturn(chatResponse("""
+                {
+                  "title": "Guest checkout",
+                  "description": "A shopper completes a purchase without registering.",
+                  "storyText": "As a shopper, I want guest checkout so that I can purchase.",
+                  "priority": "URGENT"
+                }
+                """));
+
+        assertThrows(IllegalStateException.class,
+                () -> provider.generateUserStory(requirementForImprovement()));
+    }
 
     @Test
     void classifyReturnsValidClassification() {

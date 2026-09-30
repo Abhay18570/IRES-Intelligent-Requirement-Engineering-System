@@ -10,6 +10,7 @@ import com.ires.requirement.entity.RequirementPriority;
 import com.ires.requirement.entity.RequirementStatus;
 import com.ires.requirement.entity.RequirementType;
 import com.ires.requirement.service.RequirementService;
+import com.ires.story.dto.GeneratedUserStory;
 import com.ires.story.dto.UserStoryCreateRequest;
 import com.ires.story.entity.StoryStatus;
 import com.ires.story.entity.UserStory;
@@ -22,7 +23,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -73,14 +73,21 @@ class UserStoryServiceTest {
         Requirement requirement = requirement();
         when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
         when(projectService.currentUser(principal)).thenReturn(requirement.getCreatedBy());
-        when(analysisProvider.analyze(requirement)).thenReturn(new AIAnalysisProvider.AIAnalysisResult(
-                "AI summary", new BigDecimal("10"), new BigDecimal("90"), new BigDecimal("85"), "Suggestions"));
+        when(analysisProvider.generateUserStory(requirement)).thenReturn(new GeneratedUserStory(
+            "Guest checkout story",
+            "A shopper can check out without an account.",
+            "As a shopper, I want to check out as a guest so that I can purchase without creating an account.",
+            RequirementPriority.MEDIUM
+        ));
         when(userStoryRepository.save(any(UserStory.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         var response = userStoryService.generate(requirement.getId(), principal);
 
-        assertThat(response.title()).contains("Guest checkout");
-        assertThat(response.storyText()).contains("Guest checkout");
+        assertThat(response.title()).isEqualTo("Guest checkout story");
+        assertThat(response.description()).isEqualTo("A shopper can check out without an account.");
+        assertThat(response.storyText()).isEqualTo(
+            "As a shopper, I want to check out as a guest so that I can purchase without creating an account.");
+        assertThat(response.priority()).isEqualTo(RequirementPriority.MEDIUM);
         assertThat(response.status()).isEqualTo(StoryStatus.DRAFT);
     }
 
@@ -88,7 +95,7 @@ class UserStoryServiceTest {
     void reportsUnavailableAIProviderAsServiceUnavailable() {
         Requirement requirement = requirement();
         when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
-        when(analysisProvider.analyze(requirement)).thenThrow(new IllegalStateException("offline"));
+        when(analysisProvider.generateUserStory(requirement)).thenThrow(new IllegalStateException("offline"));
 
         assertThatThrownBy(() -> userStoryService.generate(requirement.getId(), principal))
                 .isInstanceOf(ServiceUnavailableException.class);

@@ -17,8 +17,11 @@ import com.ires.ai.dto.analysis.MissingInformation;
 import com.ires.ai.dto.analysis.QualityAnalysisRequest;
 import com.ires.ai.dto.analysis.QualityAnalysisResponse;
 import com.ires.ai.dto.analysis.QualityDimension;
+import com.ires.ai.dto.analysis.RequirementImprovementResponse;
 import com.ires.ai.dto.analysis.RequirementCandidate;
 import com.ires.requirement.entity.Requirement;
+import com.ires.requirement.entity.RequirementPriority;
+import com.ires.story.dto.GeneratedUserStory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -147,6 +150,42 @@ public class MockAIAnalysisProvider implements AIAnalysisProvider {
         return new ConflictDetectionResponse(
                 conflicts,
                 new BigDecimal("0.87")
+        );
+    }
+
+    @Override
+    public RequirementImprovementResponse improveRequirement(Requirement requirement) {
+        if (!available) {
+            throw new IllegalStateException("AI analysis provider is unavailable.");
+        }
+        String title = requirement.getTitle() == null ? "" : requirement.getTitle();
+        String description = requirement.getDescription();
+        return new RequirementImprovementResponse(
+                requirement.getId(),
+                title,
+                title,
+                description,
+                description,
+                "The mock provider returned a deterministic requirement improvement proposal.",
+                new BigDecimal("0.90")
+        );
+    }
+
+    @Override
+    public GeneratedUserStory generateUserStory(Requirement requirement) {
+        if (!available) {
+            throw new IllegalStateException("AI analysis provider is unavailable.");
+        }
+        String title = requirement.getTitle() == null ? "User story" : requirement.getTitle();
+        String description = requirement.getDescription();
+        if (description == null || description.isBlank()) {
+            description = "User story generated from requirement: " + title;
+        }
+        return new GeneratedUserStory(
+                title,
+                description,
+                "As a user, I want " + title + " so that the requirement delivers its intended value.",
+                requirement.getPriority() == null ? RequirementPriority.MEDIUM : requirement.getPriority()
         );
     }
 
