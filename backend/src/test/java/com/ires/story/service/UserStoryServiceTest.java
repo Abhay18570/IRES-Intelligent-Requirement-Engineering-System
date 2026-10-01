@@ -2,6 +2,8 @@ package com.ires.story.service;
 
 import com.ires.ai.service.AIAnalysisProvider;
 import com.ires.common.exception.ServiceUnavailableException;
+import com.ires.common.exception.ForbiddenException;
+import com.ires.common.exception.ConflictException;
 import com.ires.project.entity.Project;
 import com.ires.project.entity.ProjectStatus;
 import com.ires.project.service.ProjectService;
@@ -12,6 +14,7 @@ import com.ires.requirement.entity.RequirementType;
 import com.ires.requirement.service.RequirementService;
 import com.ires.story.dto.GeneratedUserStory;
 import com.ires.story.dto.UserStoryCreateRequest;
+import com.ires.story.dto.UserStoryUpdateRequest;
 import com.ires.story.entity.StoryStatus;
 import com.ires.story.entity.UserStory;
 import com.ires.story.repository.UserStoryRepository;
@@ -24,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.UUID;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -88,7 +92,7 @@ class UserStoryServiceTest {
         assertThat(response.storyText()).isEqualTo(
             "As a shopper, I want to check out as a guest so that I can purchase without creating an account.");
         assertThat(response.priority()).isEqualTo(RequirementPriority.MEDIUM);
-        assertThat(response.status()).isEqualTo(StoryStatus.DRAFT);
+        assertThat(response.status()).isEqualTo(StoryStatus.PENDING_REVIEW);
     }
 
     @Test
@@ -100,6 +104,38 @@ class UserStoryServiceTest {
         assertThatThrownBy(() -> userStoryService.generate(requirement.getId(), principal))
                 .isInstanceOf(ServiceUnavailableException.class);
     }
+
+    @Test
+    void manualStoryCreationCannotSetReviewOnlyStatus() {
+        Requirement requirement = requirement();
+        when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+        when(projectService.currentUser(principal)).thenReturn(requirement.getCreatedBy());
+
+        assertThatThrownBy(() -> userStoryService.create(requirement.getId(), new UserStoryCreateRequest(
+                "Manually approved", "Description", "As a user, I want a feature.",
+                RequirementPriority.MEDIUM, StoryStatus.APPROVED), principal))
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+            @Test
+            void pendingStoryCannotBeUpdatedOrDeletedOutsideReviewWorkflow() {
+            Requirement requirement = requirement();
+            UserStory story = new UserStory(requirement, "Guest checkout", "Description",
+                "As a shopper, I want guest checkout.", RequirementPriority.MEDIUM,
+                StoryStatus.PENDING_REVIEW, requirement.getCreatedBy());
+            story.setId(UUID.randomUUID());
+            when(userStoryRepository.findById(story.getId())).thenReturn(Optional.of(story));
+            when(projectService.currentUser(principal)).thenReturn(requirement.getCreatedBy());
+            when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+
+            assertThatThrownBy(() -> userStoryService.update(story.getId(), new UserStoryUpdateRequest(
+                "Edited title", "Edited description", "As a shopper, I want guest checkout.",
+                RequirementPriority.MEDIUM, null), principal))
+                .isInstanceOf(ConflictException.class);
+            assertThatThrownBy(() -> userStoryService.delete(story.getId(), principal))
+                .isInstanceOf(ConflictException.class);
+            org.mockito.Mockito.verify(userStoryRepository, org.mockito.Mockito.never()).delete(story);
+            }
 
     @Test
     void missingRequirementIsRejected() {

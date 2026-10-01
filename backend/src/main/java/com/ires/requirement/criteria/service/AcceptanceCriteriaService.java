@@ -1,6 +1,7 @@
 package com.ires.requirement.criteria.service;
 
 import com.ires.common.exception.BadRequestException;
+import com.ires.common.exception.ConflictException;
 import com.ires.common.exception.NotFoundException;
 import com.ires.common.exception.ForbiddenException;
 import com.ires.common.exception.ServiceUnavailableException;
@@ -91,7 +92,7 @@ public class AcceptanceCriteriaService {
                             criterion.title().trim(),
                             criterion.description().trim(),
                             criterion.criteriaType(),
-                            CriteriaStatus.DRAFT
+                                CriteriaStatus.PENDING_REVIEW
                     );
                 })
                 .toList();
@@ -119,6 +120,7 @@ public class AcceptanceCriteriaService {
         AcceptanceCriteria criteria = findCriteria(id);
         requirementService.findAccessibleRequirement(criteria.getRequirement().getId(), principal);
         assertAnalystOrAdmin(principal);
+        assertNotReviewManaged(criteria);
         UserStory userStory = findStoryForRequirement(request.userStoryId(), criteria.getRequirement().getId());
         criteria.setUserStory(userStory);
         criteria.setTitle(request.title().trim());
@@ -133,6 +135,7 @@ public class AcceptanceCriteriaService {
         AcceptanceCriteria criteria = findCriteria(id);
         requirementService.findAccessibleRequirement(criteria.getRequirement().getId(), principal);
         assertAnalystOrAdmin(principal);
+        assertNotReviewManaged(criteria);
         criteriaRepository.delete(criteria);
     }
 
@@ -158,7 +161,19 @@ public class AcceptanceCriteriaService {
     }
 
     private CriteriaStatus defaultStatus(CriteriaStatus status) {
+        if (status == CriteriaStatus.PENDING_REVIEW || status == CriteriaStatus.APPROVED
+                || status == CriteriaStatus.REJECTED) {
+            throw new ForbiddenException("Review status can only be changed through the artifact review endpoint.");
+        }
         return status == null ? CriteriaStatus.DRAFT : status;
+    }
+
+    private void assertNotReviewManaged(AcceptanceCriteria criteria) {
+        if (criteria.getStatus() == CriteriaStatus.PENDING_REVIEW
+                || criteria.getStatus() == CriteriaStatus.APPROVED
+                || criteria.getStatus() == CriteriaStatus.REJECTED) {
+            throw new ConflictException("Reviewed artifacts can only be changed through the review workflow.");
+        }
     }
 
     private void assertAnalystOrAdmin(UserDetails principal) {

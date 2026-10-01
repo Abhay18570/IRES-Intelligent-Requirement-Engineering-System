@@ -1,5 +1,8 @@
 package com.ires.srs.entity;
 
 public enum SrsDocumentStatus {
-    DRAFT
+    DRAFT,
+    PENDING_REVIEW,
+    APPROVED,
+    REJECTED
 }

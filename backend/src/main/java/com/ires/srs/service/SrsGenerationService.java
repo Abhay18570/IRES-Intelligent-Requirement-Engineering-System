@@ -93,6 +93,7 @@ public class SrsGenerationService {
                 generated.title().trim(),
                 objectMapper.valueToTree(generated)
         );
+        document.setStatus(com.ires.srs.entity.SrsDocumentStatus.PENDING_REVIEW);
         return SrsDocumentResponse.from(srsDocumentRepository.save(document));
     }
 

@@ -112,7 +112,7 @@ class SrsGenerationServiceTest {
 
         assertThat(response.id()).isEqualTo(documentId);
         assertThat(response.projectId()).isEqualTo(project.getId());
-        assertThat(response.status()).isEqualTo(SrsDocumentStatus.DRAFT);
+        assertThat(response.status()).isEqualTo(SrsDocumentStatus.PENDING_REVIEW);
         assertThat(response.content().path("functionalRequirements").get(0).asText())
                 .isEqualTo("The system shall support guest checkout.");
 

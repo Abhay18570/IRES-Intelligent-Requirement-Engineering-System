@@ -3,6 +3,7 @@ package com.ires.requirement.criteria.service;
 import com.ires.common.exception.BadRequestException;
 import com.ires.common.exception.NotFoundException;
 import com.ires.common.exception.ServiceUnavailableException;
+import com.ires.common.exception.ForbiddenException;
 import com.ires.ai.dto.analysis.AcceptanceCriteriaGenerationResponse;
 import com.ires.ai.service.AIAnalysisProvider;
 import com.ires.project.entity.Project;
@@ -144,7 +145,7 @@ class AcceptanceCriteriaServiceTest {
         assertThat(responses).allSatisfy(response -> {
             assertThat(response.requirementId()).isEqualTo(requirement.getId());
             assertThat(response.userStoryId()).isEqualTo(story.getId());
-            assertThat(response.status()).isEqualTo(CriteriaStatus.DRAFT);
+            assertThat(response.status()).isEqualTo(CriteriaStatus.PENDING_REVIEW);
         });
         assertThat(responses.get(0).title()).isEqualTo("Checkout succeeds");
         verify(analysisProvider).generateAcceptanceCriteria(requirement, story);
@@ -163,6 +164,35 @@ class AcceptanceCriteriaServiceTest {
                 .isInstanceOf(ServiceUnavailableException.class);
         verify(criteriaRepository, never()).saveAll(any());
     }
+
+        @Test
+        void manualCriteriaCreationCannotSetReviewOnlyStatus() {
+                Requirement requirement = requirement();
+                when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+
+                assertThatThrownBy(() -> criteriaService.create(requirement.getId(), new AcceptanceCriteriaCreateRequest(
+                                null, "Manually approved", "Description", CriteriaType.FUNCTIONAL, CriteriaStatus.APPROVED), principal))
+                                .isInstanceOf(ForbiddenException.class);
+        }
+
+                    @Test
+                    void rejectedCriteriaCannotBeUpdatedOrDeletedOutsideReviewWorkflow() {
+                        Requirement requirement = requirement();
+                        AcceptanceCriteria criteria = new AcceptanceCriteria(requirement, null, "Rejected criterion", "Details",
+                                CriteriaType.FUNCTIONAL, CriteriaStatus.REJECTED);
+                        UUID criteriaId = UUID.randomUUID();
+                        criteria.setId(criteriaId);
+                        when(criteriaRepository.findById(criteriaId)).thenReturn(Optional.of(criteria));
+                        when(requirementService.findAccessibleRequirement(requirement.getId(), principal)).thenReturn(requirement);
+
+                        assertThatThrownBy(() -> criteriaService.update(criteriaId,
+                                new com.ires.requirement.criteria.dto.AcceptanceCriteriaUpdateRequest(
+                                        null, "Changed", "Changed details", CriteriaType.FUNCTIONAL, null), principal))
+                                .isInstanceOf(com.ires.common.exception.ConflictException.class);
+                        assertThatThrownBy(() -> criteriaService.delete(criteriaId, principal))
+                                .isInstanceOf(com.ires.common.exception.ConflictException.class);
+                        verify(criteriaRepository, never()).delete(criteria);
+                    }
 
     private Requirement requirement() {
         User owner = new User("Test", "Owner", "owner@example.com", "hash", null);

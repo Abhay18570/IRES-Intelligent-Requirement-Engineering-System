@@ -53,7 +53,7 @@ public class AcceptanceCriteria {
     private CriteriaType criteriaType = CriteriaType.FUNCTIONAL;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 20)
     private CriteriaStatus status = CriteriaStatus.DRAFT;
 
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -2,6 +2,7 @@ package com.ires.story.service;
 
 import com.ires.ai.service.AIAnalysisProvider;
 import com.ires.common.exception.ForbiddenException;
+import com.ires.common.exception.ConflictException;
 import com.ires.common.exception.NotFoundException;
 import com.ires.common.exception.ServiceUnavailableException;
 import com.ires.project.service.ProjectService;
@@ -67,6 +68,7 @@ public class UserStoryService {
     public UserStoryResponse update(UUID id, UserStoryUpdateRequest request, UserDetails principal) {
         UserStory story = findStory(id);
         assertCanModify(story, principal);
+        assertNotReviewManaged(story);
         story.setTitle(request.title().trim());
         story.setDescription(request.description());
         story.setStoryText(request.storyText().trim());
@@ -79,6 +81,7 @@ public class UserStoryService {
     public void delete(UUID id, UserDetails principal) {
         UserStory story = findStory(id);
         assertCanModify(story, principal);
+        assertNotReviewManaged(story);
         userStoryRepository.delete(story);
     }
 
@@ -99,7 +102,7 @@ public class UserStoryService {
                 generated.description(),
                 generated.storyText(),
                 generated.priority(),
-                StoryStatus.DRAFT,
+                StoryStatus.PENDING_REVIEW,
                 creator
         );
         return UserStoryResponse.from(userStoryRepository.save(story));
@@ -129,11 +132,22 @@ public class UserStoryService {
                 .anyMatch("ROLE_ADMIN"::equals);
     }
 
+    private void assertNotReviewManaged(UserStory story) {
+        if (story.getStatus() == StoryStatus.PENDING_REVIEW
+                || story.getStatus() == StoryStatus.APPROVED
+                || story.getStatus() == StoryStatus.REJECTED) {
+            throw new ConflictException("Reviewed artifacts can only be changed through the review workflow.");
+        }
+    }
+
     private RequirementPriority defaultPriority(RequirementPriority priority, Requirement requirement) {
         return priority == null ? requirement.getPriority() : priority;
     }
 
     private StoryStatus defaultStatus(StoryStatus status) {
+        if (status == StoryStatus.PENDING_REVIEW || status == StoryStatus.APPROVED || status == StoryStatus.REJECTED) {
+            throw new ForbiddenException("Review status can only be changed through the artifact review endpoint.");
+        }
         return status == null ? StoryStatus.DRAFT : status;
     }
 }
